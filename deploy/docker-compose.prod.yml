@@ -1,0 +1,153 @@
+# Déploiement production sur un VPS KVM LWS.
+# Lancer depuis la racine :
+#   docker compose --env-file deploy/.env -f deploy/docker-compose.prod.yml up -d --build
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: langchain-evaltask:${APP_VERSION:-2.0.0}
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8000"
+    environment:
+      APP_NAME: ${APP_NAME:-LangChain EvalTask Server}
+      APP_VERSION: ${APP_VERSION:-2.0.0}
+      HOST: 0.0.0.0
+      PORT: 8000
+      DEBUG: "false"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS doit être défini}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET doit être défini}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRY_LEEWAY_SECONDS: ${JWT_EXPIRY_LEEWAY_SECONDS:-30}
+      OPENROUTER_DEFAULT_MODEL: ${OPENROUTER_DEFAULT_MODEL:-z-ai/glm-5.2}
+      OPENROUTER_FALLBACK_MODEL: ${OPENROUTER_FALLBACK_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-60}
+      OPENROUTER_MAX_RETRIES: ${OPENROUTER_MAX_RETRIES:-2}
+      EMBEDDING_PROVIDER_URL: ${EMBEDDING_PROVIDER_URL:-https://openrouter.ai/api/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      CHROMA_PERSIST_DIR: /app/data/chromadb
+      CHROMA_MAX_RESULTS: ${CHROMA_MAX_RESULTS:-5}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD doit être défini}@redis:6379/0
+      REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-20}
+      REDIS_SOCKET_TIMEOUT: ${REDIS_SOCKET_TIMEOUT:-5.0}
+      CONVERSATION_TTL_SECONDS: ${CONVERSATION_TTL_SECONDS:-3600}
+      CONVERSATION_MAX_MESSAGES: ${CONVERSATION_MAX_MESSAGES:-50}
+      CACHE_ENABLED: ${CACHE_ENABLED:-true}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-600}
+      MAX_TOOL_ROUNDS: ${MAX_TOOL_ROUNDS:-5}
+      MAX_TOKENS: ${MAX_TOKENS:-4096}
+      TEMPERATURE: ${TEMPERATURE:-0.7}
+      RATE_LIMIT_REQUESTS_PER_MINUTE: ${RATE_LIMIT_REQUESTS_PER_MINUTE:-30}
+      RATE_LIMIT_EMBED_PER_MINUTE: ${RATE_LIMIT_EMBED_PER_MINUTE:-10}
+      RATE_LIMIT_TOKENS_PER_DAY: ${RATE_LIMIT_TOKENS_PER_DAY:-500000}
+      RATE_LIMIT_FAIL_OPEN: "false"
+      API_KEY_SERVER_MANAGED: ${API_KEY_SERVER_MANAGED:-true}
+      BUDGET_ALERT_THRESHOLD_USD: ${BUDGET_ALERT_THRESHOLD_USD:-10.0}
+      TENANT_BUDGET_DEFAULT_USD: ${TENANT_BUDGET_DEFAULT_USD:-50.0}
+      COST_TRACKING_ENABLED: ${COST_TRACKING_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      TRACE_SAMPLING_RATE: ${TRACE_SAMPLING_RATE:-0.1}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}
+      CIRCUIT_BREAKER_COOLDOWN_SECONDS: ${CIRCUIT_BREAKER_COOLDOWN_SECONDS:-30}
+      MAX_INPUT_LENGTH: ${MAX_INPUT_LENGTH:-10000}
+      MAX_HISTORY_MESSAGES: ${MAX_HISTORY_MESSAGES:-30}
+    volumes:
+      - chromadb_data:/app/data/chromadb
+      - ../data/knowledge:/app/data/knowledge:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    command:
+      - gunicorn
+      - app.main:app
+      - --workers
+      - "${GUNICORN_WORKERS:-2}"
+      - --worker-class
+      - uvicorn.workers.UvicornWorker
+      - --bind
+      - 0.0.0.0:8000
+      - --timeout
+      - "${GUNICORN_TIMEOUT:-120}"
+      - --graceful-timeout
+      - "30"
+      - --access-logfile
+      - -
+      - --error-logfile
+      - -
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+      - edge
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - "${REDIS_PASSWORD:?REDIS_PASSWORD doit être défini}"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD doit être défini}
+    networks:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN doit être défini}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL doit être défini}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - edge
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  chromadb_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  backend:
+    internal: true
+  edge:

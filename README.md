@@ -37,6 +37,8 @@ cp .env.example .env
 docker compose up -d
 ```
 
+Pour un déploiement de production sur un VPS KVM LWS, utiliser la configuration dédiée et son guide : [`deploy/README.md`](deploy/README.md).
+
 ### Sans Docker
 
 ```bash

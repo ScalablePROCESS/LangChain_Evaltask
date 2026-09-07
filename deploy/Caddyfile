@@ -1,0 +1,28 @@
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+{$DOMAIN} {
+    encode zstd gzip
+
+    # Ne pas exposer les métriques, diagnostics internes ni la documentation publiquement.
+    @internal_endpoints path /metrics /docs /redoc /openapi.json /api/v1/circuit-breaker /api/v1/redis/pool
+    respond @internal_endpoints 404
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), geolocation=(), microphone=()"
+        -Server
+    }
+
+    reverse_proxy app:8000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        flush_interval -1
+    }
+}

@@ -15,8 +15,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Code applicatif
 COPY . .
 
-# Créer les répertoires de données
-RUN mkdir -p /app/data/chromadb /app/data/knowledge
+# Créer un utilisateur non privilégié et les répertoires de données
+RUN useradd --system --uid 10001 --create-home appuser \
+    && mkdir -p /app/data/chromadb /app/data/knowledge \
+    && chown -R appuser:appuser /app
+
+USER appuser
 
 # Port
 EXPOSE 8000
