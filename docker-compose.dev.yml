@@ -1,0 +1,14 @@
+# ============================================================================
+# LangChain EvalTask — Docker Compose DÉVELOPPEMENT
+# Usage : docker compose -f docker-compose.dev.yml up -d
+# Démarre uniquement Redis en mode standalone (pas de cluster, pas de persistance).
+# Le serveur Python tourne en local (uvicorn --reload).
+# ============================================================================
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: langchain-redis-dev
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru

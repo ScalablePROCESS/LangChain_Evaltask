@@ -1,0 +1,80 @@
+[project]
+name = "langchain-evaltask"
+version = "2.0.0"
+description = "Serveur LangChain centralisé pour les plateformes EvalTask (multi-tenant, OpenRouter)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+
+dependencies = [
+    # --- Web framework ---
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "gunicorn>=23.0.0",
+    "python-multipart>=0.0.9",
+
+    # --- LangChain ---
+    "langchain>=0.3.0",
+    "langchain-openai>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-text-splitters>=0.3.0",
+    "langchain-chroma>=0.2.0",
+    "langchain-huggingface>=0.1.0",
+    "sentence-transformers>=3.0.0",
+
+    # --- Vectorstore ---
+    "chromadb>=0.5.0",
+
+    # --- Auth ---
+    "PyJWT>=2.9.0",
+    "cryptography>=43.0.0",
+
+    # --- Redis ---
+    "redis>=5.0.0",
+
+    # --- Configuration ---
+    "pydantic-settings>=2.5.0",
+
+    # --- HTTP ---
+    "httpx>=0.27.0",
+
+    # --- Document extraction ---
+    "pymupdf>=1.24.0",
+    "python-docx>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27.0",
+    "ruff>=0.7.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/chains/evaltask_chain.py" = ["E501"]
+"app/tools/definitions.py" = ["E501"]
+"app/conversation/summarizer.py" = ["E501"]
+"app/api/chat.py" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::jwt.InsecureKeyLengthWarning",
+    "ignore::DeprecationWarning:chromadb",
+]
